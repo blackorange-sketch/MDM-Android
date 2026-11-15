@@ -32,6 +32,12 @@ android {
     buildFeatures { compose = true }
 }
 
+// The Kotlin part must match the Rust crate: the version of "rustls-platform-verifier-android"
+// that Cargo locked (run `cargo fetch` first).
+val rustlsAndroidVersion: String = Regex("""name = "rustls-platform-verifier-android"\s+version = "([^"]+)"""")
+    .find(rootProject.file("../Cargo.lock").readText())?.groupValues?.get(1)
+    ?: error("rustls-platform-verifier-android is not in Cargo.lock (run `cargo fetch`)")
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
@@ -40,5 +46,5 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     // The Kotlin half of rustls-platform-verifier (see settings.gradle.kts).
-    implementation("rustls:rustls-platform-verifier:latest.release")
+    implementation("rustls:rustls-platform-verifier:$rustlsAndroidVersion")
 }
