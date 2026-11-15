@@ -46,5 +46,5 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     // The Kotlin half of rustls-platform-verifier (see settings.gradle.kts).
-    implementation("rustls:rustls-platform-verifier:$rustlsAndroidVersion")
+    implementation("org.rustls:rustls-platform-verifier:$rustlsAndroidVersion")
 }
