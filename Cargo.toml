@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["core"]
+# Upstream is its own workspace (scripts/prepare-upstream.sh puts it here).
+exclude = ["third_party"]
 
 [workspace.package]
 version = "0.1.0"

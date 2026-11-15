@@ -1,0 +1,15 @@
+diff --git a/crates/engine/src/ftp.rs b/crates/engine/src/ftp.rs
+index 43b4898..4716ba3 100644
+--- a/crates/engine/src/ftp.rs
++++ b/crates/engine/src/ftp.rs
+@@ -480,6 +480,10 @@ pub(crate) fn client_config(extra: &[Vec<u8>]) -> Result<rustls::ClientConfig, r
+         return Ok(crate::tls::no_roots_config());
+     }
+     let provider = crate::tls::provider();
++    // Android's verifier takes no extra roots (they only serve the tests' own CA).
++    #[cfg(target_os = "android")]
++    let verifier = Verifier::new(provider.clone())?;
++    #[cfg(not(target_os = "android"))]
+     let verifier = if extra.is_empty() {
+         Verifier::new(provider.clone())
+     } else {

@@ -17,7 +17,7 @@ Licensed under GPL-3.0-or-later, like upstream.
 GitHub Actions builds everything on each push: the Rust core with `cargo ndk` for `arm64-v8a`,
 then the debug APK (artifact `MDM-debug-apk`).
 
-Locally: install the Android NDK and `cargo install cargo-ndk`, then
+Locally: run `scripts/prepare-upstream.sh` first (fetches upstream at a pinned revision and applies `patches/`), install the Android NDK and `cargo install cargo-ndk`, then
 
 ```sh
 cargo ndk --platform 26 -t arm64-v8a -o android/app/src/main/jniLibs build --release -p mdm-android-core
