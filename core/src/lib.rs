@@ -13,10 +13,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use jni::JNIEnv;
-use jni::objects::{JClass, JObject, JString};
+use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 use mdm_engine::state::state_path;
-use mdm_engine::{Destination, Download, Options, Request, State};
+use mdm_engine::download::State;
+use mdm_engine::{Destination, Download, Options, Request};
 use mdm_torrent::{Config, Phase, Source, Torrents};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -90,23 +91,33 @@ fn core() -> Result<&'static Core, String> {
 // JNI
 // ---------------------------------------------------------------------------------------------
 
-/// `Native.init(context, dataDir, downloadDir): String` — an empty string, or the error.
+/// `Native.initTls(context)`: gives the TLS verifier the app's context, to check certificates with
+/// Android's own trust store. Must run before any connection. (rustls-platform-verifier 0.7 uses
+/// jni 0.22, the rest of this bridge jni 0.21: hence the two crates.)
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_blackorange_mdm_Native_initTls<'l>(
+    mut unowned_env: jni22::EnvUnowned<'l>,
+    _class: jni22::objects::JClass<'l>,
+    context: jni22::objects::JObject<'l>,
+) {
+    let outcome = unowned_env.with_env(|env| -> Result<(), jni22::errors::Error> {
+        rustls_platform_verifier::android::init_with_env(env, context)
+    });
+    outcome.resolve::<jni22::errors::ThrowRuntimeExAndDefault>()
+}
+
+/// `Native.init(dataDir, downloadDir): String` — an empty string, or the error.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_blackorange_mdm_Native_init<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
-    context: JObject<'l>,
     data_dir: JString<'l>,
     download_dir: JString<'l>,
 ) -> jstring {
     let result = (|| -> Result<(), String> {
         let data: String = env.get_string(&data_dir).map_err(|e| e.to_string())?.into();
         let dir: String = env.get_string(&download_dir).map_err(|e| e.to_string())?.into();
-        #[cfg(target_os = "android")]
-        rustls_platform_verifier::android::init_hosted(&mut env, context)
-            .map_err(|e| format!("TLS verifier: {e}"))?;
-        #[cfg(not(target_os = "android"))]
-        let _ = context;
         init(PathBuf::from(data), PathBuf::from(dir))
     })();
     to_jstring(&mut env, result.err().unwrap_or_default())

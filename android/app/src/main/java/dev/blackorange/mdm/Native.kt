@@ -13,7 +13,10 @@ object Native {
     }
 
     @JvmStatic
-    private external fun init(context: Context, dataDir: String, downloadDir: String): String
+    private external fun initTls(context: Context)
+
+    @JvmStatic
+    private external fun init(dataDir: String, downloadDir: String): String
 
     @JvmStatic
     private external fun call(method: String, args: String): String
@@ -30,7 +33,8 @@ object Native {
         Thread {
             initError = try {
                 val dir = app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir
-                init(app, app.filesDir.absolutePath, dir.absolutePath)
+                initTls(app)
+                init(app.filesDir.absolutePath, dir.absolutePath)
             } catch (t: Throwable) {
                 t.message ?: t.javaClass.simpleName
             }

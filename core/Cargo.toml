@@ -27,6 +27,8 @@ http = "1"
 # Android's certificate verifier needs a Kotlin part in the app (see app/settings.gradle.kts).
 # The same version as upstream's, so Cargo keeps one copy.
 rustls-platform-verifier = "0.7.1"
+# The jni the verifier is written against (0.22); only used to hand it the app context.
+jni22 = { package = "jni", version = "0.22" }
 
 # QuickJS (proxy auto-config scripts in the engine) ships no ready bindings for Android: they are
 # made from its C headers while building (needs libclang; cargo-ndk points it at the NDK).
