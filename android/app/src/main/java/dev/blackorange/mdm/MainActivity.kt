@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -71,8 +73,22 @@ class MainActivity : ComponentActivity() {
     /** The link in a VIEW or SEND intent: a magnet or address as text, or a .torrent as content://. */
     private fun linkFrom(intent: Intent?): String? = when (intent?.action) {
         Intent.ACTION_VIEW -> intent.data?.toString()
-        Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+        Intent.ACTION_SEND -> {
+            // Apps share "Title https://…" as often as a bare link: take the first link in it.
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+            text?.let { LINK.find(it)?.value ?: it.trim() }
+                ?: streamOf(intent)?.toString()
+        }
         else -> null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun streamOf(intent: Intent): Uri? =
+        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else intent.getParcelableExtra(Intent.EXTRA_STREAM)
+
+    private companion object {
+        val LINK = Regex("""(magnet:\?\S+|(https?|ftp)://\S+)""", RegexOption.IGNORE_CASE)
     }
 }
 
@@ -84,6 +100,27 @@ private fun MainScreen(incoming: String?, onIncomingHandled: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     var items by remember { mutableStateOf<List<Item>>(emptyList()) }
     var showAdd by remember { mutableStateOf(false) }
+
+    // Downloads go to the public Download folder, which needs access to all files (Android 11+)
+    // or the storage permission (older).
+    var hasStorage by remember { mutableStateOf(storageAccess(context)) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) hasStorage = storageAccess(context)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val legacyStorage = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { hasStorage = storageAccess(context) }
+    LaunchedEffect(hasStorage) {
+        if (hasStorage) {
+            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            withContext(Dispatchers.IO) { Native.setDownloadDir(dir.absolutePath) }
+        }
+    }
 
     val notifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -157,6 +194,29 @@ private fun MainScreen(incoming: String?, onIncomingHandled: () -> Unit) {
         }
     }
 
+    if (!hasStorage) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Access to the Download folder") },
+            text = { Text("To save files into your Download folder, MDM needs access to files. Until then it saves into its own folder.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:${context.packageName}"),
+                            ),
+                        )
+                    } else {
+                        legacyStorage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }
+                }) { Text("Allow") }
+            },
+            dismissButton = { TextButton(onClick = { hasStorage = true }) { Text("Later") } },
+        )
+    }
+
     if (showAdd) {
         var text by remember { mutableStateOf("") }
         AlertDialog(
@@ -206,6 +266,12 @@ private fun ItemCard(item: Item, onPause: () -> Unit, onResume: () -> Unit, onRe
         }
     }
 }
+
+private fun storageAccess(context: android.content.Context): Boolean =
+    if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
+    else androidx.core.content.ContextCompat.checkSelfPermission(
+        context, Manifest.permission.WRITE_EXTERNAL_STORAGE,
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
 fun formatSize(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"

@@ -53,6 +53,9 @@ object Native {
 
     fun addTorrentFile(path: String) = request("add_torrent_file", JSONObject().put("path", path))
 
+    /** New downloads go to [path] (existing ones keep their folder). */
+    fun setDownloadDir(path: String) = request("set_download_dir", JSONObject().put("path", path))
+
     fun pause(id: String) = request("pause", JSONObject().put("id", id))
 
     fun resume(id: String) = request("resume", JSONObject().put("id", id))

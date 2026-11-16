@@ -27,8 +27,8 @@ const METADATA_WAIT: Duration = Duration::from_secs(90);
 struct Core {
     rt: tokio::runtime::Runtime,
     torrents: Torrents,
-    /// Where finished and running downloads go.
-    dir: PathBuf,
+    /// Where new downloads go (the app can change it once it has access to the public folder).
+    dir: Mutex<PathBuf>,
     /// The app's private folder: our list, librqbit's resume data.
     data: PathBuf,
     items: Mutex<Items>,
@@ -193,7 +193,7 @@ fn init(data: PathBuf, dir: PathBuf) -> Result<(), String> {
     let core = Core {
         rt,
         torrents,
-        dir,
+        dir: Mutex::new(dir),
         data,
         items: Mutex::new(items),
     };
@@ -228,6 +228,12 @@ fn dispatch(method: &str, args: &str) -> Result<Value, String> {
             let files = a.get("delete_files").and_then(Value::as_bool).unwrap_or(false);
             remove(c, &text("id")?, files)
         }
+        "set_download_dir" => {
+            let dir = PathBuf::from(text("path")?);
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            *c.dir.lock().unwrap() = dir;
+            Ok(json!({ "ok": true }))
+        }
         "set_limits" => {
             // Bytes per second for torrents; 0 or missing: unlimited.
             let n = |k: &str| a.get(k).and_then(Value::as_u64).filter(|v| *v > 0);
@@ -253,7 +259,7 @@ fn add(c: &'static Core, link: &str) -> Result<Value, String> {
     let mut it = HttpItem {
         id,
         url: url.to_string(),
-        dir: c.dir.clone(),
+        dir: c.dir.lock().unwrap().clone(),
         file: None,
         dl: None,
         status: "connecting",
@@ -315,7 +321,7 @@ async fn resolve_and_start(c: &Core, src: &Source) -> Result<(String, String), S
         .metadata(src, METADATA_WAIT, None)
         .await
         .map_err(|e| e.to_string())?;
-    let folder = meta.folder_in(&c.dir);
+    let folder = meta.folder_in(&c.dir.lock().unwrap());
     let hash = c
         .torrents
         .add(&meta.torrent, &folder, None, meta.peers.clone(), false)
